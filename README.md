@@ -1,6 +1,10 @@
-# Sailrite Pillows (prototype)
+# Sailrite Pillows
 
-Fabric yardage calculator for pillows. v1 implements **Throw Pillows** (knife-edge cover), aligned with [Sailrite’s Throw Pillows calculator](https://www.fabric-calculator.com/throw-pillows.aspx).
+Fabric yardage calculator for pillows, aligned with [Sailrite’s Fabric Calculator](https://www.fabric-calculator.com/pillows.aspx).
+
+## Pillow types
+- **Throw Pillows** — knife-edge cover (front + back panels), optional piping + leftover strip.
+- **Bolster Pillows** — cylinder / neck-roll (end circles + barrel), Regular/Tight fit, optional piping.
 
 ## Run
 ```bash
@@ -14,10 +18,9 @@ npm run build
 ```
 
 ## Notes
-- Enter pillow **form** width (A) and length (B). Cut panels = form size (Sailrite does not add seam allowance to the cut). With ½″ seams the finished cover is ~1″ smaller per side.
-- Quantity 1–20 → 2 cut panels per pillow (front + back).
-- Pattern: none (best pack) | horizontal | vertical.
+- Enter pillow **form** dimensions. Throw cut panels = form size (no SA on cut). Bolster Regular adds ½″; Tight does not.
+- Quantity 1–20. Pattern defaults to **Horizontal** (Sailrite default).
 - Order yards round **up to whole yards** (same convention as nesting).
 - Estimate only — verify before cutting or ordering.
 
-See `docs/SPEC.md` for scope and extension points.
+See `docs/SPEC.md` for formulas, live parity examples, and the 2″ vs 2¼″ Velcro note.

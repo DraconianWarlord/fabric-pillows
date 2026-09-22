@@ -231,3 +231,80 @@ describe('packPanels', () => {
     expect(p.lengthInches).toBe(40)
   })
 })
+
+
+describe('piping optional (live Sailrite parity)', () => {
+  it('18×18 qty2 fab54 → pref 154 in / 12.83 ft, match 9 / 0.25, bias 60 / 1.67', () => {
+    const r = calculateThrowPillows({
+      formWidthIn: 18,
+      formLengthIn: 18,
+      quantity: 2,
+      fabricWidthIn: 54,
+      pattern: 'horizontal',
+    })
+    expect(r.piping.prefabricatedIn).toBe(154)
+    expect(r.piping.prefabricatedFt).toBeCloseTo(12.83, 2)
+    expect(r.piping.matchingFabricIn).toBe(9)
+    expect(r.piping.matchingFabricYd).toBeCloseTo(0.25, 2)
+    expect(r.piping.biasFabricIn).toBe(60)
+    expect(r.piping.biasFabricYd).toBeCloseTo(1.67, 2)
+  })
+
+  it('prefabricated = qty × perimeter + 10 join ease', () => {
+    const r = calculateThrowPillows({
+      formWidthIn: 20,
+      formLengthIn: 16,
+      quantity: 3,
+      fabricWidthIn: 54,
+      pattern: 'horizontal',
+    })
+    expect(r.piping.prefabricatedIn).toBe(3 * 2 * (20 + 16) + 10) // 226
+  })
+
+  it('matching uses strip 3″ over (fabricWidth − 1)', () => {
+    const r = calculateThrowPillows({
+      formWidthIn: 18,
+      formLengthIn: 18,
+      quantity: 2,
+      fabricWidthIn: 36,
+      pattern: 'horizontal',
+    })
+    expect(r.piping.matchingFabricIn).toBe(14)
+    expect(r.piping.biasFabricIn).toBe(45)
+  })
+})
+
+describe('leftover strip (live Sailrite parity)', () => {
+  it('18×18 qty2 fab54 → 36 × 18 leftover', () => {
+    const r = calculateThrowPillows({
+      formWidthIn: 18,
+      formLengthIn: 18,
+      quantity: 2,
+      fabricWidthIn: 54,
+      pattern: 'horizontal',
+    })
+    expect(r.pack.leftover).toEqual({ widthIn: 36, lengthIn: 18 })
+  })
+
+  it('18×18 qty2 fab36 → no leftover (full width used)', () => {
+    const r = calculateThrowPillows({
+      formWidthIn: 18,
+      formLengthIn: 18,
+      quantity: 2,
+      fabricWidthIn: 36,
+      pattern: 'horizontal',
+    })
+    expect(r.pack.leftover).toBeNull()
+  })
+
+  it('20×16 qty3 fab54 → 14 × 48 side strip', () => {
+    const r = calculateThrowPillows({
+      formWidthIn: 20,
+      formLengthIn: 16,
+      quantity: 3,
+      fabricWidthIn: 54,
+      pattern: 'horizontal',
+    })
+    expect(r.pack.leftover).toEqual({ widthIn: 14, lengthIn: 48 })
+  })
+})

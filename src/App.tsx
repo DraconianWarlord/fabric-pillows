@@ -14,15 +14,22 @@ import {
   type PatternDirection,
   type Unit,
 } from './lib/throwPillows'
+import {
+  calculateBolster,
+  type BolsterFit,
+  type BolsterPattern,
+} from './lib/bolsterPillows'
 import './App.css'
 
 function formatDim(inches: number, unit: Unit): string {
   const v = fromInches(inches, unit)
-  if (unit === 'in') return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '')
+  if (unit === 'in') {
+    return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, '')
+  }
   return v.toFixed(0)
 }
 
-function PillowDiagram({
+function ThrowDiagram({
   formW,
   formL,
   cutW,
@@ -39,7 +46,6 @@ function PillowDiagram({
   finishedL: number
   unit: Unit
 }) {
-  // Cut = form size (Sailrite); show finished (snug) dashed inside cut.
   const max = Math.max(cutW, cutL, finishedW, finishedL, 1)
   const scale = 140 / max
   const cw = cutW * scale
@@ -111,20 +117,80 @@ function PillowDiagram({
   )
 }
 
+function BolsterDiagram({
+  diameterIn,
+  lengthIn,
+  endDiameterIn,
+  barrelAlongIn,
+  barrelCircIn,
+  unit,
+}: {
+  diameterIn: number
+  lengthIn: number
+  endDiameterIn: number
+  barrelAlongIn: number
+  barrelCircIn: number
+  unit: Unit
+}) {
+  const r = 36
+  const bodyW = 120
+  const bodyH = 72
+  const cx = 50
+  const cy = 70
+  return (
+    <svg
+      className="pillow-diagram"
+      viewBox="0 0 280 150"
+      role="img"
+      aria-label="Bolster form and cut diagram"
+    >
+      <ellipse cx={cx} cy={cy} rx={r * 0.45} ry={r} fill="#e8eaf6" stroke="#24285e" strokeWidth={2} />
+      <rect x={cx} y={cy - r} width={bodyW} height={bodyH} fill="#e8eaf6" stroke="none" />
+      <ellipse
+        cx={cx + bodyW}
+        cy={cy}
+        rx={r * 0.45}
+        ry={r}
+        fill="#c5cae9"
+        stroke="#24285e"
+        strokeWidth={2}
+      />
+      <line x1={cx} y1={cy - r} x2={cx + bodyW} y2={cy - r} stroke="#24285e" strokeWidth={2} />
+      <line x1={cx} y1={cy + r} x2={cx + bodyW} y2={cy + r} stroke="#24285e" strokeWidth={2} />
+      <text x={cx + bodyW / 2} y={cy - r - 8} textAnchor="middle" className="diag-label">
+        B form {formatDim(lengthIn, unit)} → cut {formatDim(barrelAlongIn, unit)}
+      </text>
+      <text x={cx - 28} y={cy + 4} textAnchor="middle" className="diag-label" transform={`rotate(-90 ${cx - 28} ${cy})`}>
+        A ⌀ {formatDim(diameterIn, unit)}
+      </text>
+      <text x={cx + bodyW + 40} y={cy - 10} className="diag-legend">
+        end cut ⌀ {formatDim(endDiameterIn, unit)}
+      </text>
+      <text x={cx + bodyW + 40} y={cy + 8} className="diag-legend">
+        barrel circ {formatDim(barrelCircIn, unit)}
+      </text>
+    </svg>
+  )
+}
+
 export default function App() {
   const [unit, setUnit] = useState<Unit>('in')
   const [widthDraft, setWidthDraft] = useState('18')
   const [lengthDraft, setLengthDraft] = useState('18')
   const [fabricDraft, setFabricDraft] = useState(String(DEFAULT_FABRIC_WIDTH_IN))
   const [quantity, setQuantity] = useState(1)
-  const [pattern, setPattern] = useState<PatternDirection>('none')
+  const [pattern, setPattern] = useState<PatternDirection>('horizontal')
   const [pillowTypeId, setPillowTypeId] = useState('throw')
+  const [bolsterFit, setBolsterFit] = useState<BolsterFit>('regular')
+  const [bolsterPattern, setBolsterPattern] = useState<BolsterPattern>('horizontal')
 
   const formWidthIn = Math.max(0.1, toInches(Number(widthDraft) || 0, unit))
   const formLengthIn = Math.max(0.1, toInches(Number(lengthDraft) || 0, unit))
   const fabricWidthIn = Math.max(1, toInches(Number(fabricDraft) || 0, unit))
 
-  const result = useMemo(
+  const isBolster = pillowTypeId === 'bolster'
+
+  const throwResult = useMemo(
     () =>
       calculateThrowPillows({
         formWidthIn,
@@ -136,8 +202,21 @@ export default function App() {
     [formWidthIn, formLengthIn, quantity, fabricWidthIn, pattern],
   )
 
-  const exact = result.pack.exactYards
-  const order = result.pack.orderYards
+  const bolsterResult = useMemo(
+    () =>
+      calculateBolster({
+        diameterIn: formWidthIn,
+        lengthIn: formLengthIn,
+        quantity,
+        fabricWidthIn,
+        pattern: bolsterPattern,
+        fit: bolsterFit,
+      }),
+    [formWidthIn, formLengthIn, quantity, fabricWidthIn, bolsterPattern, bolsterFit],
+  )
+
+  const exact = isBolster ? bolsterResult.nest.exactYards : throwResult.pack.exactYards
+  const order = isBolster ? bolsterResult.nest.orderYards : throwResult.pack.orderYards
   const unitLabel = unit === 'in' ? 'in' : 'mm'
   const activeType = PILLOW_TYPES.find((t) => t.id === pillowTypeId) ?? PILLOW_TYPES[0]!
 
@@ -148,32 +227,34 @@ export default function App() {
     const f = Number(fabricDraft)
     if (Number.isFinite(w) && w > 0) {
       setWidthDraft(
-        String(
-          Number(
-            fromInches(toInches(w, unit), next).toFixed(next === 'in' ? 3 : 0),
-          ),
-        ),
+        String(Number(fromInches(toInches(w, unit), next).toFixed(next === 'in' ? 3 : 0))),
       )
     }
     if (Number.isFinite(l) && l > 0) {
       setLengthDraft(
-        String(
-          Number(
-            fromInches(toInches(l, unit), next).toFixed(next === 'in' ? 3 : 0),
-          ),
-        ),
+        String(Number(fromInches(toInches(l, unit), next).toFixed(next === 'in' ? 3 : 0))),
       )
     }
     if (Number.isFinite(f) && f > 0) {
       setFabricDraft(
-        String(
-          Number(
-            fromInches(toInches(f, unit), next).toFixed(next === 'in' ? 3 : 0),
-          ),
-        ),
+        String(Number(fromInches(toInches(f, unit), next).toFixed(next === 'in' ? 3 : 0))),
       )
     }
     setUnit(next)
+  }
+
+  function selectPillowType(id: string) {
+    setPillowTypeId(id)
+    if (id === 'bolster') {
+      setWidthDraft(unit === 'in' ? '8' : String(Math.round(8 * 25.4)))
+      setLengthDraft(unit === 'in' ? '20' : String(Math.round(20 * 25.4)))
+      setBolsterPattern('horizontal')
+      setBolsterFit('regular')
+    } else {
+      setWidthDraft(unit === 'in' ? '18' : String(Math.round(18 * 25.4)))
+      setLengthDraft(unit === 'in' ? '18' : String(Math.round(18 * 25.4)))
+      setPattern('horizontal')
+    }
   }
 
   return (
@@ -226,7 +307,7 @@ export default function App() {
                     t.status === 'soon' ? ' soon' : ''
                   }`}
                   disabled={t.status === 'soon'}
-                  onClick={() => t.status === 'active' && setPillowTypeId(t.id)}
+                  onClick={() => t.status === 'active' && selectPillowType(t.id)}
                   title={t.status === 'soon' ? 'Coming soon' : t.blurb}
                 >
                   <span className="type-label">{t.label}</span>
@@ -263,9 +344,11 @@ export default function App() {
           </section>
 
           <section className="card">
-            <h2 className="card-title">throw pillow inputs</h2>
+            <h2 className="card-title">
+              {isBolster ? 'bolster pillow inputs' : 'throw pillow inputs'}
+            </h2>
             <label>
-              A. width (form)
+              {isBolster ? 'A. diameter / width (form)' : 'A. width (form)'}
               <input
                 type="number"
                 min={1}
@@ -274,12 +357,15 @@ export default function App() {
                 onChange={(e) => setWidthDraft(e.target.value)}
               />
               <span className="hint">
-                finished cover ≈ form − {FORM_TO_FINISHED_REDUCTION_IN}" ({SEAM_ALLOWANCE_IN}"
-                seams; cut = form)
+                {isBolster
+                  ? bolsterFit === 'regular'
+                    ? `Regular Fit: end cut = form + ${SEAM_ALLOWANCE_IN}"; finished ≈ form − ${SEAM_ALLOWANCE_IN}"`
+                    : 'Tight Fit: cut = form; finished ≈ form − 1"'
+                  : `finished cover ≈ form − ${FORM_TO_FINISHED_REDUCTION_IN}" (${SEAM_ALLOWANCE_IN}" seams; cut = form)`}
               </span>
             </label>
             <label>
-              B. length (form)
+              {isBolster ? 'B. length (form)' : 'B. length (form)'}
               <input
                 type="number"
                 min={1}
@@ -290,10 +376,7 @@ export default function App() {
             </label>
             <label>
               quantity
-              <select
-                value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
-              >
+              <select value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}>
                 {Array.from({ length: MAX_QUANTITY - MIN_QUANTITY + 1 }, (_, i) => {
                   const n = MIN_QUANTITY + i
                   return (
@@ -315,31 +398,85 @@ export default function App() {
               />
               <span className="hint">often 46, 54, or 60 {unitLabel}</span>
             </label>
-            <fieldset className="pattern-fieldset">
-              <legend>pattern direction</legend>
-              {(
-                [
-                  ['none', 'none'],
-                  ['horizontal', 'horizontal'],
-                  ['vertical', 'vertical'],
-                ] as const
-              ).map(([val, label]) => (
-                <label key={val} className="radio-label">
-                  <input
-                    type="radio"
-                    name="pattern"
-                    value={val}
-                    checked={pattern === val}
-                    onChange={() => setPattern(val)}
-                  />
-                  {label}
-                </label>
-              ))}
-              <span className="hint">
-                horizontal = pattern on pillow length (length along bolt). vertical = pattern on
-                width. none = best packing.
-              </span>
-            </fieldset>
+
+            {isBolster ? (
+              <>
+                <fieldset className="pattern-fieldset">
+                  <legend>pattern direction</legend>
+                  {(
+                    [
+                      ['horizontal', 'horizontal'],
+                      ['vertical', 'vertical'],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <label key={val} className="radio-label">
+                      <input
+                        type="radio"
+                        name="bolster-pattern"
+                        value={val}
+                        checked={bolsterPattern === val}
+                        onChange={() => setBolsterPattern(val)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                  <span className="hint">
+                    horizontal = pattern around the pillow (circ along bolt). vertical = pattern
+                    across the pillow (length along bolt).
+                  </span>
+                </fieldset>
+                <fieldset className="pattern-fieldset">
+                  <legend>fit</legend>
+                  {(
+                    [
+                      ['regular', 'regular'],
+                      ['tight', 'tight'],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <label key={val} className="radio-label">
+                      <input
+                        type="radio"
+                        name="bolster-fit"
+                        value={val}
+                        checked={bolsterFit === val}
+                        onChange={() => setBolsterFit(val)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                  <span className="hint">
+                    Regular adds ½″ SA (default). Tight adds none — cover ~1″ smaller. Closure
+                    overlap 2″ on circumference (tips mention 2¼″ for Velcro).
+                  </span>
+                </fieldset>
+              </>
+            ) : (
+              <fieldset className="pattern-fieldset">
+                <legend>pattern direction</legend>
+                {(
+                  [
+                    ['horizontal', 'horizontal'],
+                    ['vertical', 'vertical'],
+                    ['none', 'none / best pack'],
+                  ] as const
+                ).map(([val, label]) => (
+                  <label key={val} className="radio-label">
+                    <input
+                      type="radio"
+                      name="pattern"
+                      value={val}
+                      checked={pattern === val}
+                      onChange={() => setPattern(val)}
+                    />
+                    {label}
+                  </label>
+                ))}
+                <span className="hint">
+                  Sailrite default is horizontal (pattern on pillow length). vertical = pattern on
+                  width. none / best pack = pick lower yardage orientation.
+                </span>
+              </fieldset>
+            )}
           </section>
         </aside>
 
@@ -349,7 +486,13 @@ export default function App() {
             <div className="results-yards">
               <div>
                 <div className="big-exact">{exact.toFixed(2)} yd</div>
-                <div className="big-meta">{formatDim(result.pack.lengthInches, unit)} {unitLabel} along bolt</div>
+                <div className="big-meta">
+                  {formatDim(
+                    isBolster ? bolsterResult.nest.lengthInches : throwResult.pack.lengthInches,
+                    unit,
+                  )}{' '}
+                  {unitLabel} along bolt
+                </div>
               </div>
               <div>
                 <div className="big-order">Order {order} yd</div>
@@ -369,7 +512,7 @@ export default function App() {
           <section className="card">
             <h2 className="card-title">cut list</h2>
             <ul className="cut-list">
-              {result.cutList.map((c) => (
+              {(isBolster ? bolsterResult.cutList : throwResult.cutList).map((c) => (
                 <li key={c.label}>
                   <strong>
                     {c.qty}× {formatDim(c.widthIn, unit)} × {formatDim(c.lengthIn, unit)}{' '}
@@ -379,40 +522,119 @@ export default function App() {
                 </li>
               ))}
             </ul>
-            <p className="hint">
-              packing: {result.pack.acrossCount} across × {result.pack.rows} row
-              {result.pack.rows === 1 ? '' : 's'} (
-              {result.pack.orientation.label === 'width-across'
-                ? 'width across bolt'
-                : 'length across bolt'}
-              )
-              {result.pack.leftoverAcrossIn > 0.05
-                ? ` · leftover strip ≈ ${formatDim(result.pack.leftoverAcrossIn, unit)} ${unitLabel}`
-                : ''}
-            </p>
+            {isBolster ? (
+              <p className="hint">
+                nesting: {bolsterResult.nest.barrelAcrossCount} barrel
+                {bolsterResult.nest.barrelAcrossCount === 1 ? '' : 's'} across ×{' '}
+                {bolsterResult.nest.barrelRows} row
+                {bolsterResult.nest.barrelRows === 1 ? '' : 's'}
+                {bolsterResult.nest.endExtraRows > 0
+                  ? ` + ${bolsterResult.nest.endExtraRows} end-circle row${
+                      bolsterResult.nest.endExtraRows === 1 ? '' : 's'
+                    }`
+                  : ' (ends nested beside barrels)'}
+              </p>
+            ) : (
+              <p className="hint">
+                packing: {throwResult.pack.acrossCount} across × {throwResult.pack.rows} row
+                {throwResult.pack.rows === 1 ? '' : 's'} (
+                {throwResult.pack.orientation.label === 'width-across'
+                  ? 'width across bolt'
+                  : 'length across bolt'}
+                )
+              </p>
+            )}
           </section>
 
+          {!isBolster && (
+            <section className="card">
+              <h2 className="card-title">piping or binding (optional)</h2>
+              <ul className="materials">
+                <li>
+                  Prefabricated piping:{' '}
+                  <strong>
+                    {throwResult.piping.prefabricatedIn} in / {throwResult.piping.prefabricatedFt}{' '}
+                    ft
+                  </strong>
+                </li>
+                <li>
+                  Matching (straight) piping fabric add-on:{' '}
+                  <strong>
+                    {throwResult.piping.matchingFabricIn} in /{' '}
+                    {throwResult.piping.matchingFabricYd} yd
+                  </strong>
+                </li>
+                <li>
+                  Bias-cut piping fabric add-on:{' '}
+                  <strong>
+                    {throwResult.piping.biasFabricIn} in / {throwResult.piping.biasFabricYd} yd
+                  </strong>
+                </li>
+              </ul>
+              {throwResult.pack.leftover ? (
+                <p className="hint">
+                  Fabric left over: a strip{' '}
+                  <strong>
+                    {formatDim(throwResult.pack.leftover.widthIn, unit)} ×{' '}
+                    {formatDim(throwResult.pack.leftover.lengthIn, unit)} {unitLabel}
+                  </strong>{' '}
+                  (usable for matching piping?).
+                </p>
+              ) : (
+                <p className="hint">Fabric left over: none.</p>
+              )}
+            </section>
+          )}
+
+          {isBolster && (
+            <section className="card">
+              <h2 className="card-title">piping (optional)</h2>
+              <ul className="materials">
+                <li>
+                  Prefabricated piping:{' '}
+                  <strong>
+                    {bolsterResult.pipingIn} in / {bolsterResult.pipingFt} ft
+                  </strong>{' '}
+                  — order {bolsterResult.pipingOrderFt} ft
+                </li>
+              </ul>
+            </section>
+          )}
+
           <section className="card">
-            <h2 className="card-title">form vs cut</h2>
-            <PillowDiagram
-              formW={formWidthIn}
-              formL={formLengthIn}
-              cutW={result.cutWidthIn}
-              cutL={result.cutLengthIn}
-              finishedW={result.finishedWidthIn}
-              finishedL={result.finishedLengthIn}
-              unit={unit}
-            />
-            <p className="hint">
-              finished ≈ {formatDim(result.finishedWidthIn, unit)} ×{' '}
-              {formatDim(result.finishedLengthIn, unit)} {unitLabel}
-            </p>
+            <h2 className="card-title">{isBolster ? 'form vs cut' : 'form vs cut'}</h2>
+            {isBolster ? (
+              <BolsterDiagram
+                diameterIn={formWidthIn}
+                lengthIn={formLengthIn}
+                endDiameterIn={bolsterResult.cuts.endDiameterIn}
+                barrelAlongIn={bolsterResult.cuts.barrelAlongIn}
+                barrelCircIn={bolsterResult.cuts.barrelCircIn}
+                unit={unit}
+              />
+            ) : (
+              <ThrowDiagram
+                formW={formWidthIn}
+                formL={formLengthIn}
+                cutW={throwResult.cutWidthIn}
+                cutL={throwResult.cutLengthIn}
+                finishedW={throwResult.finishedWidthIn}
+                finishedL={throwResult.finishedLengthIn}
+                unit={unit}
+              />
+            )}
+            {!isBolster && (
+              <p className="hint">
+                finished ≈ {formatDim(throwResult.finishedWidthIn, unit)} ×{' '}
+                {formatDim(throwResult.finishedLengthIn, unit)} {unitLabel}
+              </p>
+            )}
           </section>
 
           <section className="card">
             <h2 className="card-title">materials summary</h2>
             <ul className="materials">
-              {result.materials.map((m) => (
+              {(isBolster ? bolsterResult.materials : throwResult.materials).map((m) => (
                 <li key={m}>{m}</li>
               ))}
             </ul>

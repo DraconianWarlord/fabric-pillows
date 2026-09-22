@@ -15,13 +15,13 @@ export const MM_PER_IN = 25.4
 
 /**
  * Sailrite tip: cut panels use form measurements with no added seam allowance.
- * Prefabricated forms sewn with ½″ seams yield a snug finished cover
- * (finished ≈ form − 1″ per dimension).
+ * Prefabricated forms sewn with 1/2" seams yield a snug finished cover
+ * (finished approx form - 1" per dimension).
  */
 export const SEAM_ALLOWANCE_IN = 0.5
 
 /** Effective finished reduction vs form when using SEAM_ALLOWANCE_IN seams. */
-export const FORM_TO_FINISHED_REDUCTION_IN = 2 * SEAM_ALLOWANCE_IN // 1″
+export const FORM_TO_FINISHED_REDUCTION_IN = 2 * SEAM_ALLOWANCE_IN // 1"
 
 /** Knife-edge: front + back panels per pillow. */
 export const PANELS_PER_PILLOW = 2
@@ -29,6 +29,26 @@ export const PANELS_PER_PILLOW = 2
 export const DEFAULT_FABRIC_WIDTH_IN = 54
 export const MIN_QUANTITY = 1
 export const MAX_QUANTITY = 20
+
+/** Join ease added once to total prefabricated piping length (inches). */
+export const PIPING_JOIN_EASE_IN = 10
+
+/**
+ * Straight (matching) piping strip width (inches).
+ * Live: add-on = ceil(prefIn * strip / (fabricWidth - joinLoss)).
+ */
+export const MATCHING_PIPING_STRIP_WIDTH_IN = 3
+
+/** Usable fabric-width reduction when estimating matching-piping strip yield. */
+export const MATCHING_PIPING_WIDTH_JOIN_LOSS_IN = 1
+
+/**
+ * Bias-cut piping fabric add-on (inches along bolt):
+ * fabricWidth + round(2 * prefIn / (fabricWidth - adjust)).
+ * Reverse-engineered from live Sailrite throw results (18x18 qty2 @54 -> 60 in).
+ */
+export const BIAS_PIPING_WIDTH_ADJUST_IN = 3
+export const BIAS_PIPING_PREF_COEFF = 2
 
 export function toInches(value: number, unit: Unit): number {
   return unit === 'in' ? value : value / MM_PER_IN
@@ -40,7 +60,7 @@ export function fromInches(inches: number, unit: Unit): number {
 
 /**
  * Cut panel size = form size (Sailrite does not add SA to cut).
- * Documented snug: finished ≈ form − FORM_TO_FINISHED_REDUCTION_IN.
+ * Documented snug: finished approx form - FORM_TO_FINISHED_REDUCTION_IN.
  */
 export function cutPanelSize(formInches: number): number {
   return formInches
@@ -58,6 +78,11 @@ export function exactYards(usedInches: number): number {
 export function orderYards(exact: number, step = 1): number {
   if (exact <= 0) return 0
   return Math.ceil(exact / step - 1e-9) * step
+}
+
+/** Round to 2 decimal places (Sailrite display for feet / yard fractions). */
+export function round2(n: number): number {
+  return Math.round(n * 100 + Number.EPSILON) / 100
 }
 
 export type ThrowPillowInput = {
@@ -78,6 +103,11 @@ export type Orientation = {
   label: 'width-across' | 'length-across'
 }
 
+export type LeftoverStrip = {
+  widthIn: number
+  lengthIn: number
+}
+
 export type PackResult = {
   orientation: Orientation
   panelsNeeded: number
@@ -87,6 +117,16 @@ export type PackResult = {
   exactYards: number
   orderYards: number
   leftoverAcrossIn: number
+  leftover: LeftoverStrip | null
+}
+
+export type PipingOptional = {
+  prefabricatedIn: number
+  prefabricatedFt: number
+  matchingFabricIn: number
+  matchingFabricYd: number
+  biasFabricIn: number
+  biasFabricYd: number
 }
 
 export type ThrowPillowResult = {
@@ -96,15 +136,15 @@ export type ThrowPillowResult = {
   finishedLengthIn: number
   panelsNeeded: number
   pack: PackResult
-  /** Alternate orientation pack when pattern allows rotation (none). */
   alternatePack: PackResult | null
   cutList: { label: string; widthIn: number; lengthIn: number; qty: number }[]
   materials: string[]
+  piping: PipingOptional
 }
 
 /**
- * Horizontal: pattern runs on pillow length → length along bolt, width across.
- * Vertical: pattern runs on pillow width → width along bolt, length across.
+ * Horizontal: pattern on pillow length -> length along bolt, width across.
+ * Vertical: pattern on pillow width -> width along bolt, length across.
  * None: try both; pick lower yardage (ties prefer horizontal).
  */
 export function orientationsForPattern(
@@ -127,6 +167,81 @@ export function orientationsForPattern(
   return [widthAcross, lengthAcross]
 }
 
+/**
+ * Prefabricated knife-edge piping (inches).
+ * Live: qty * 2*(W+L) + PIPING_JOIN_EASE_IN
+ * Example: 18x18 qty2 -> 2*72 + 10 = 154.
+ */
+export function prefabricatedPipingInches(
+  formWidthIn: number,
+  formLengthIn: number,
+  quantity: number,
+): number {
+  const perimeter = 2 * (formWidthIn + formLengthIn)
+  return quantity * perimeter + PIPING_JOIN_EASE_IN
+}
+
+/** Matching (straight-grain) piping fabric add-on along the bolt (inches). */
+export function matchingPipingFabricInches(
+  prefabricatedIn: number,
+  fabricWidthIn: number,
+): number {
+  const usable = Math.max(1, fabricWidthIn - MATCHING_PIPING_WIDTH_JOIN_LOSS_IN)
+  return Math.ceil((prefabricatedIn * MATCHING_PIPING_STRIP_WIDTH_IN) / usable - 1e-12)
+}
+
+/** Bias-cut piping fabric add-on along the bolt (inches). */
+export function biasPipingFabricInches(
+  prefabricatedIn: number,
+  fabricWidthIn: number,
+): number {
+  const denom = Math.max(1, fabricWidthIn - BIAS_PIPING_WIDTH_ADJUST_IN)
+  return fabricWidthIn + Math.round((BIAS_PIPING_PREF_COEFF * prefabricatedIn) / denom)
+}
+
+export function computePipingOptional(
+  formWidthIn: number,
+  formLengthIn: number,
+  quantity: number,
+  fabricWidthIn: number,
+): PipingOptional {
+  const prefabricatedIn = prefabricatedPipingInches(formWidthIn, formLengthIn, quantity)
+  const matchingFabricIn = matchingPipingFabricInches(prefabricatedIn, fabricWidthIn)
+  const biasFabricIn = biasPipingFabricInches(prefabricatedIn, fabricWidthIn)
+  return {
+    prefabricatedIn,
+    prefabricatedFt: round2(prefabricatedIn / 12),
+    matchingFabricIn,
+    matchingFabricYd: round2(matchingFabricIn / 36),
+    biasFabricIn,
+    biasFabricYd: round2(biasFabricIn / 36),
+  }
+}
+
+/**
+ * Sailrite leftover strip:
+ * - sideStrip = fabricWidth - acrossCount * acrossDim
+ * - unusedInLastRow = (acrossCount - lastRowPanels) * acrossDim
+ * - width = sideStrip + unusedInLastRow
+ * - length = alongDim when sideStrip ~= 0; else full used length
+ */
+export function leftoverStrip(
+  orientation: Orientation,
+  panelsNeeded: number,
+  acrossCount: number,
+  rows: number,
+  lengthInches: number,
+  fabricWidthIn: number,
+): LeftoverStrip | null {
+  const sideStrip = fabricWidthIn - acrossCount * orientation.acrossIn
+  const lastRowPanels = panelsNeeded - (rows - 1) * acrossCount
+  const unusedInLastRow = (acrossCount - lastRowPanels) * orientation.acrossIn
+  const widthIn = sideStrip + unusedInLastRow
+  if (widthIn <= 1e-9) return null
+  const lengthIn = sideStrip <= 1e-9 ? orientation.alongIn : lengthInches
+  return { widthIn, lengthIn }
+}
+
 export function packPanels(
   orientation: Orientation,
   panelsNeeded: number,
@@ -136,11 +251,15 @@ export function packPanels(
   const rows = Math.ceil(panelsNeeded / acrossCount)
   const lengthInches = rows * orientation.alongIn
   const exact = exactYards(lengthInches)
-  // Scrap strip width from the last (possibly partial) row — matches Sailrite leftovers.
   const lastRowPanels = panelsNeeded - (rows - 1) * acrossCount
-  const leftoverAcrossIn = Math.max(
-    0,
-    fabricWidthIn - lastRowPanels * orientation.acrossIn,
+  const leftoverAcrossIn = Math.max(0, fabricWidthIn - lastRowPanels * orientation.acrossIn)
+  const leftover = leftoverStrip(
+    orientation,
+    panelsNeeded,
+    acrossCount,
+    rows,
+    lengthInches,
+    fabricWidthIn,
   )
   return {
     orientation,
@@ -151,17 +270,12 @@ export function packPanels(
     exactYards: exact,
     orderYards: orderYards(exact),
     leftoverAcrossIn,
+    leftover,
   }
 }
 
 export function calculateThrowPillows(input: ThrowPillowInput): ThrowPillowResult {
-  const {
-    formWidthIn,
-    formLengthIn,
-    quantity,
-    fabricWidthIn,
-    pattern,
-  } = input
+  const { formWidthIn, formLengthIn, quantity, fabricWidthIn, pattern } = input
 
   const cutWidthIn = cutPanelSize(formWidthIn)
   const cutLengthIn = cutPanelSize(formLengthIn)
@@ -170,13 +284,19 @@ export function calculateThrowPillows(input: ThrowPillowInput): ThrowPillowResul
   const orients = orientationsForPattern(cutWidthIn, cutLengthIn, pattern)
   const packs = orients.map((o) => packPanels(o, panelsNeeded, fabricWidthIn))
 
-  // Prefer fewer inches; stable tie-break keeps first (horizontal / width-across).
   let best = packs[0]!
   for (const p of packs.slice(1)) {
     if (p.lengthInches + 1e-9 < best.lengthInches) best = p
   }
   const alternatePack =
     packs.length > 1 ? packs.find((p) => p !== best) ?? null : null
+
+  const piping = computePipingOptional(
+    formWidthIn,
+    formLengthIn,
+    quantity,
+    fabricWidthIn,
+  )
 
   const cutList = [
     {
@@ -189,8 +309,11 @@ export function calculateThrowPillows(input: ThrowPillowInput): ThrowPillowResul
 
   const materials = [
     `${best.orderYards} yd fabric (${best.exactYards.toFixed(2)} yd exact; ${best.lengthInches} in along bolt)`,
-    `${panelsNeeded} cut panels @ ${cutWidthIn} × ${cutLengthIn} in (knife-edge front + back)`,
-    `finished cover ≈ ${finishedSize(formWidthIn)} × ${finishedSize(formLengthIn)} in (form − ${FORM_TO_FINISHED_REDUCTION_IN}" with ${SEAM_ALLOWANCE_IN}" seams)`,
+    `${panelsNeeded} cut panels @ ${cutWidthIn} x ${cutLengthIn} in (knife-edge front + back)`,
+    `finished cover approx ${finishedSize(formWidthIn)} x ${finishedSize(formLengthIn)} in (form - ${FORM_TO_FINISHED_REDUCTION_IN}" with ${SEAM_ALLOWANCE_IN}" seams)`,
+    `optional prefabricated piping: ${piping.prefabricatedIn} in (${piping.prefabricatedFt} ft)`,
+    `optional matching piping fabric: add ${piping.matchingFabricIn} in (${piping.matchingFabricYd} yd)`,
+    `optional bias-cut piping fabric: add ${piping.biasFabricIn} in (${piping.biasFabricYd} yd)`,
   ]
 
   return {
@@ -203,5 +326,6 @@ export function calculateThrowPillows(input: ThrowPillowInput): ThrowPillowResul
     alternatePack,
     cutList,
     materials,
+    piping,
   }
 }

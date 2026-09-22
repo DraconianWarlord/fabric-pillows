@@ -42,7 +42,7 @@ export const ACTIVE_CALCULATOR = CALCULATORS.find((c) => c.status === 'active')!
 /** Every calculator except the one currently open. */
 export const OTHER_CALCULATORS = CALCULATORS.filter((c) => c.id !== ACTIVE_CALCULATOR.id)
 
-/** Pillow subtypes — Throw active; others stubbed for later capture. */
+/** Pillow subtypes — Throw + Bolster active. */
 export type PillowTypeStatus = 'active' | 'soon'
 
 export type PillowType = {
@@ -66,9 +66,9 @@ export const PILLOW_TYPES: PillowType[] = [
   {
     id: 'bolster',
     label: 'Bolster Pillows',
-    status: 'soon',
+    status: 'active',
     referenceUrl: 'https://www.fabric-calculator.com/bolster-pillows.aspx',
-    blurb: 'Cylinder / neck-roll — stub until math captured',
+    blurb: 'Cylinder / neck-roll cover (ends + barrel)',
   },
 ]
 
