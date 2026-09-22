@@ -44,6 +44,7 @@ describe('live Sailrite reverse-engineer cases', () => {
     expect(r.pack.lengthInches).toBe(18)
     expect(r.pack.exactYards).toBeCloseTo(0.5, 5)
     expect(r.pack.acrossCount).toBe(3)
+    expect(r.pack.leftoverAcrossIn).toBe(18) // last row places 2 of 3 capacity
     expect(r.pack.orderYards).toBe(1)
   })
 

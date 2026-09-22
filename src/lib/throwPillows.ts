@@ -136,6 +136,12 @@ export function packPanels(
   const rows = Math.ceil(panelsNeeded / acrossCount)
   const lengthInches = rows * orientation.alongIn
   const exact = exactYards(lengthInches)
+  // Scrap strip width from the last (possibly partial) row — matches Sailrite leftovers.
+  const lastRowPanels = panelsNeeded - (rows - 1) * acrossCount
+  const leftoverAcrossIn = Math.max(
+    0,
+    fabricWidthIn - lastRowPanels * orientation.acrossIn,
+  )
   return {
     orientation,
     panelsNeeded,
@@ -144,7 +150,7 @@ export function packPanels(
     lengthInches,
     exactYards: exact,
     orderYards: orderYards(exact),
-    leftoverAcrossIn: Math.max(0, fabricWidthIn - acrossCount * orientation.acrossIn),
+    leftoverAcrossIn,
   }
 }
 
