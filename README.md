@@ -1,5 +1,8 @@
 # Sailrite Pillows
 
+> **Suite monorepo:** active development continues in [DraconianWarlord/fabric-calculators](https://github.com/DraconianWarlord/fabric-calculators) (`packages/calculators/`). This standalone repo is kept for history.
+
+
 Fabric yardage calculator for pillows, aligned with [Sailrite’s Fabric Calculator](https://www.fabric-calculator.com/pillows.aspx).
 
 ## Pillow types
